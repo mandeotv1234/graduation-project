@@ -1,0 +1,7 @@
+plugins {
+    id 'base'
+    id "org.hidetake.ssh" version "2.10.1"
+}
+subprojects {
+    apply plugin: 'base'
+}

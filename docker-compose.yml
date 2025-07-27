@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  config-server:
+    build: ./server/config-server
+    ports:
+      - "8888:8888"
+    networks:
+      - app-net
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=https://github.com/mandeotv1234/graduation-project-config
+
+  discovery-server:
+    build: ./server/discovery-server
+    ports:
+      - "8761:8761"
+    networks:
+      - app-net
+    depends_on:
+      - config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_CLOUD_CONFIG_URI=http://config-server:8888
+
+  user-service:
+    build: ./server/user-service
+    ports:
+      - "8081:8081"
+    networks:
+      - app-net
+    depends_on:
+      - discovery-server
+      - postgres-user
+      - config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_CLOUD_CONFIG_URI=http://config-server:8888
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_service_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-server:8761/eureka
+
+  api-gateway:
+    build: ./server/api-gateway
+    ports:
+      - "8080:8080"
+    networks:
+      - app-net
+    depends_on:
+      - discovery-server
+      - config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_CLOUD_CONFIG_URI=http://config-server:8888
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-server:8761/eureka
+
+  postgres-user:
+    image: postgres:15
+    container_name: postgres-user
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: user_service_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5433:5432"
+    networks:
+      - app-net
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_user_data:
+
+networks:
+  app-net:
+    driver: bridge
