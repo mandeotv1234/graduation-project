@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_REGISTRY = 'your-registry.com'
+        DOCKER_REGISTRY = 'your-registry.com.hcmus'
         DOCKER_CREDENTIALS_ID = 'docker-hub-credentials'
         GIT_CREDENTIALS_ID = 'git-credentials'
     }
