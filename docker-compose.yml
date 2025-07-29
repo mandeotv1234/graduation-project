@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   config-server:
     build: ./server/config-server
@@ -21,7 +19,7 @@ services:
       - config-server
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_CLOUD_CONFIG_URI=http://config-server:8888
+      - SPRING_CLOUD_CONFIG_URI=http://localhost:8888
 
   user-service:
     build: ./server/user-service
@@ -35,25 +33,100 @@ services:
       - config-server
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_CLOUD_CONFIG_URI=http://config-server:8888
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5432/user_service_db
+      - SPRING_CLOUD_CONFIG_URI=http://localhost:8888
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-user:5433/user_service_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
       - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-server:8761/eureka
 
-  api-gateway:
-    build: ./server/api-gateway
-    ports:
-      - "8080:8080"
+  # Kong Database
+  kong-database:
+    image: postgres:15
+    container_name: kong-database
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kongpass
+      POSTGRES_DB: kong
     networks:
       - app-net
+    volumes:
+      - kong_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Kong Migration
+  kong-migration:
+    image: kong:3.4
+    container_name: kong-migration
+    command: "kong migrations bootstrap"
     depends_on:
-      - discovery-server
-      - config-server
+      kong-database:
+        condition: service_healthy
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_CLOUD_CONFIG_URI=http://config-server:8888
-      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://discovery-server:8761/eureka
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kongpass
+    networks:
+      - app-net
+    restart: "no"
+
+  # Kong Gateway
+  kong:
+    image: kong:3.4
+    container_name: kong-gateway
+    depends_on:
+      kong-migration:
+        condition: service_completed_successfully
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kongpass
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_ADMIN_GUI_URL: http://localhost:8002
+    ports:
+      - "8000:8000"   # Kong Proxy
+      - "8443:8443"   # Kong Proxy SSL
+      - "8001:8001"   # Kong Admin API
+      - "8444:8444"   # Kong Admin API SSL
+      - "8002:8002"   # Kong Manager
+      - "8445:8445"   # Kong Manager SSL
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Kong Dashboard (Optional)
+  konga:
+    image: pantsel/konga:0.14.9
+    container_name: konga
+    depends_on:
+      - kong
+    environment:
+      DB_ADAPTER: postgres
+      DB_HOST: kong-database
+      DB_USER: kong
+      DB_PASSWORD: kongpass
+      DB_DATABASE: konga
+      KONGA_HOOK_TIMEOUT: 120000
+      NODE_ENV: production
+    ports:
+      - "1337:1337"
+    networks:
+      - app-net
 
   postgres-user:
     image: postgres:15
@@ -77,6 +150,7 @@ services:
 
 volumes:
   postgres_user_data:
+  kong_data:
 
 networks:
   app-net:
