@@ -1,6 +1,7 @@
 package graduation_project.user_service.adapter.web.api.controller;
 
-import com.mgmtp.ihcmc.hive.server.adapter.web.api.dtos.request.EditPostRequestDto;
+import com.mgmtp.ihcmc.hive.server.adapter.web.api.dtos.request
+        .EditPostRequestDto;
 import com.mgmtp.ihcmc.hive.server.adapter.web.api.dtos.request.UpdateUserSettingRequestDto;
 import com.mgmtp.ihcmc.hive.server.adapter.web.api.dtos.response.*;
 import com.mgmtp.ihcmc.hive.server.application.usecases.*;
